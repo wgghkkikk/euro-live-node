@@ -1,39 +1,27 @@
-name: Euro Cloud Stream
-
-on:
-  workflow_dispatch: # يتيح لك تشغيل البث يدوياً بضغطة زر
-  schedule:
-    - cron: '0 */6 * * *' # يعيد تشغيل نفسه تلقائياً كل 6 ساعات لضمان الاستمرارية
-
-jobs:
-  streaming_job:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Install Tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          pip install -U yt-dlp
-
       - name: Start Live Stream
         run: |
           while true; do
-            # سحب الرابط مع تمويه الهوية لتجاوز الحظر
+            # استخدام أداة yt-dlp مع وسيطات لتجاوز الحظر 429
+            # أضفنا --force-ipv4 لأن يوتيوب يحظر IPv6 الخاص بجيت هب غالباً
             url=$(yt-dlp --no-check-certificate \
-              --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36" \
-              -f "best[height<=360]" \
+              --force-ipv4 \
+              --geo-bypass \
+              --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36" \
+              -f "best[height<=480]" \
               -g "https://www.youtube.com/watch?v=ytsavcYF-EM")
             
-            # البث المباشر باستخدام مفتاحك الخاص
+            # إذا فشل السحب، انتظر قليلاً وأعد المحاولة بمتصفح مختلف
+            if [ z "$url" ]; then
+              echo "YouTube blocked the request, retrying with different headers..."
+              sleep 10
+              continue
+            fi
+
             ffmpeg -re -i "$url" \
-              -c:v libx264 -preset ultrafast -tune zerolatency -b:v 400k \
+              -c:v libx264 -preset ultrafast -tune zerolatency -b:v 500k \
               -c:a aac -b:a 128k -ar 44100 \
               -f flv "rtmp://a.rtmp.youtube.com/live2/Q12g-s6wc-0y03-0ua5-6e6p"
             
-            echo "Stream crashed or finished, restarting in 5 seconds..."
             sleep 5
           done
           
